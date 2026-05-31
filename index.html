@@ -33,7 +33,7 @@
 </head>
 <body>
 
-    <audio id="bgMusic" autoplay></audio>
+    <audio id="bgMusic"></audio>
 
     <canvas id="matrixCanvas"></canvas>
     <canvas id="particleCanvas"></canvas>
@@ -41,7 +41,7 @@
     <script>
         const dpr = window.devicePixelRatio || 1;
 
-        // ==================== 1. 多歌曲列表循环 & 全自动播放 ====================
+        // ==================== 1. 多歌曲列表与文字动画完美绑定 ====================
         const playlist = [
             "music/唐宁_-_我和你.ogg",
             "music/邵丽棠_-_快乐的扑满.flac"
@@ -51,12 +51,13 @@
         const audio = document.getElementById('bgMusic');
         let hasInitializedAnimation = false; 
 
+        // 设置初始歌曲
         audio.src = playlist[currentTrackIndex];
 
+        // 【安全机制】如果歌曲在文字还没放完时就提前放完了，就让它在后台静静地重新播放当前歌，绝对不打乱文字节奏！
         audio.addEventListener('ended', function() {
-            currentTrackIndex = (currentTrackIndex + 1) % playlist.length;
-            audio.src = playlist[currentTrackIndex];
-            audio.play().catch(err => console.log("切歌自动播放被拦截:", err));
+            audio.currentTime = 0;
+            audio.play().catch(e => console.log(e));
         });
 
         function startVisuals() {
@@ -74,7 +75,7 @@
                     startVisuals();
                     removePlayListeners();
                 }).catch(err => {
-                    console.log("等待用户首次交互以解锁音频...");
+                    console.log("等待交互解锁...");
                 });
             }
         }
@@ -152,7 +153,7 @@
             }
         }
 
-        // ==================== 3. 粒子文字特效（引入智能进度控制） ====================
+        // ==================== 3. 粒子文字特效 ====================
         const particleCanvas = document.getElementById('particleCanvas');
         const pCtx = particleCanvas.getContext('2d');
 
@@ -168,11 +169,10 @@
         const textSequence = ["3", "2", "1", "祝", "许萌", "六一快乐", "愿你永远天真烂漫，也永远有人偏爱"];
         let sequenceIndex = 0;
 
-        // 新增：用于掌控切换节奏的状态机变量
         let isTransitioningOut = false; 
         let stayStartTime = 0;          
-        const baseStayTime = 1800;      // 短句子看完停留的时间 (1.8秒)
-        const longStayTime = 4500;      // 最后一首长句子完全显示完后，静静观赏停留的时间 (4.5秒)
+        const baseStayTime = 1800;      // 短句子看完停留 1.8 秒
+        const longStayTime = 5500;      // 最后一首长句子完全凝聚后，稳稳停留 5.5 秒，保证绝对能看完！
 
         class Particle {
             constructor(x, y, isExtra = false) {
@@ -281,27 +281,33 @@
                     particles[i].isDying = true;
                 }
             }
-            // 重置新一页的停留计时状态
             stayStartTime = 0;
             isTransitioningOut = false;
         }
 
-        // 核心改动：废除原本强制中断的 setInterval 定时器！
-        // 初始化仅做首句加载
+        // 初始化首句
         createTextTransition(textSequence[sequenceIndex]);
 
-        // 下一页的调度逻辑
+        // 【核心优化】由文字进度完全掌控“切歌”和“切页”
         function nextSequence() {
+            const oldIndex = sequenceIndex;
             sequenceIndex = (sequenceIndex + 1) % textSequence.length;
+            
+            // 如果刚刚放完的是最后一句话（准备跳回“3”），在这一刻强行无缝切歌！
+            if (oldIndex === textSequence.length - 1) {
+                currentTrackIndex = (currentTrackIndex + 1) % playlist.length;
+                audio.src = playlist[currentTrackIndex];
+                audio.play().catch(err => console.log(err));
+            }
+
             createTextTransition(textSequence[sequenceIndex]);
         }
 
-        // ==================== 4. 动画主循环（全新状态机） ====================
+        // ==================== 4. 动画主循环 ====================
         function animate() {
             drawMatrix(); 
             pCtx.clearRect(0, 0, window.innerWidth, window.innerHeight); 
             
-            // 每帧流式平滑补充新粒子，绝不卡顿
             let bornCount = 0;
             const maxBirthPerFrame = 40; 
 
@@ -319,39 +325,29 @@
                 }
             }
 
-            // 更新并绘制现有粒子
-            let activeParticlesInPlace = 0; // 记录有多少个粒子已经准确到达了目标文字位置
+            let activeParticlesInPlace = 0; 
             
             particles.forEach(p => {
                 p.update();
                 p.draw();
-                
-                // 判断粒子是否已经精确聚拢到位
                 if (!p.isDying && Math.abs(p.x - p.targetX) < 1.5 && Math.abs(p.y - p.targetY) < 1.5) {
                     activeParticlesInPlace++;
                 }
             });
 
-            // 【核心重构：智能化进度闭环控制】
-            // 当且仅当：粒子总数量已经补齐，且至少有 92% 的粒子已经全部聚拢到位，字完全变清晰了！
+            // 智能进度闭环控制
             const currentText = textSequence[sequenceIndex];
             if (particles.filter(p => !p.isDying).length >= targetPoints.length && activeParticlesInPlace >= targetPoints.length * 0.92) {
                 
                 if (stayStartTime === 0) {
-                    // 字刚全部显现完整，这一刻开始记录停留时间
                     stayStartTime = Date.now();
                 }
 
-                // 判断应该停留多长时间（长句子停留久一点，短数字快一点）
                 const currentRequiredStayTime = currentText.length > 6 ? longStayTime : baseStayTime;
 
-                // 停留时间足够后，触发淡出并走向下一页
                 if (Date.now() - stayStartTime > currentRequiredStayTime && !isTransitioningOut) {
                     isTransitioningOut = true;
-                    // 让当前句子的所有粒子原地淡出退场
                     particles.forEach(p => p.isDying = true);
-                    
-                    // 等待半秒钟淡出特效完成后，无缝切入下一句
                     setTimeout(nextSequence, 500);
                 }
             }
