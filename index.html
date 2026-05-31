@@ -41,7 +41,7 @@
     <script>
         const dpr = window.devicePixelRatio || 1;
 
-        // ==================== 1. 多歌曲列表与文字动画完美绑定 ====================
+        // ==================== 1. 多歌曲列表与文字动画完美交替 ====================
         const playlist = [
             "music/唐宁_-_我和你.ogg",
             "music/邵丽棠_-_快乐的扑满.flac"
@@ -53,12 +53,6 @@
 
         // 设置初始歌曲
         audio.src = playlist[currentTrackIndex];
-
-        // 【安全机制】如果歌曲在文字还没放完时就提前放完了，就让它在后台静静地重新播放当前歌，绝对不打乱文字节奏！
-        audio.addEventListener('ended', function() {
-            audio.currentTime = 0;
-            audio.play().catch(e => console.log(e));
-        });
 
         function startVisuals() {
             if (!hasInitializedAnimation) {
@@ -75,7 +69,7 @@
                     startVisuals();
                     removePlayListeners();
                 }).catch(err => {
-                    console.log("等待交互解锁...");
+                    console.log("等待用户首次交互以激活音频...");
                 });
             }
         }
@@ -171,8 +165,8 @@
 
         let isTransitioningOut = false; 
         let stayStartTime = 0;          
-        const baseStayTime = 1800;      // 短句子看完停留 1.8 秒
-        const longStayTime = 5500;      // 最后一首长句子完全凝聚后，稳稳停留 5.5 秒，保证绝对能看完！
+        const baseStayTime = 1800;      // 短数字/短句看完停留 1.8 秒
+        const longStayTime = 5500;      // 最后一首长句子完全凝聚后，舒缓地停留 5.5 秒让用户完整读完
 
         class Particle {
             constructor(x, y, isExtra = false) {
@@ -288,16 +282,16 @@
         // 初始化首句
         createTextTransition(textSequence[sequenceIndex]);
 
-        // 【核心优化】由文字进度完全掌控“切歌”和“切页”
+        // 【大招：由文字进度绝对掌控换页、切歌】
         function nextSequence() {
             const oldIndex = sequenceIndex;
             sequenceIndex = (sequenceIndex + 1) % textSequence.length;
             
-            // 如果刚刚放完的是最后一句话（准备跳回“3”），在这一刻强行无缝切歌！
+            // 只要一轮文字彻底放完了（从最后一句话跳回“3”），立刻强行无缝切换下一首歌！
             if (oldIndex === textSequence.length - 1) {
                 currentTrackIndex = (currentTrackIndex + 1) % playlist.length;
                 audio.src = playlist[currentTrackIndex];
-                audio.play().catch(err => console.log(err));
+                audio.play().catch(err => console.log("切歌自动播放:", err));
             }
 
             createTextTransition(textSequence[sequenceIndex]);
@@ -348,7 +342,7 @@
                 if (Date.now() - stayStartTime > currentRequiredStayTime && !isTransitioningOut) {
                     isTransitioningOut = true;
                     particles.forEach(p => p.isDying = true);
-                    setTimeout(nextSequence, 500);
+                    setTimeout(nextSequence, 500); // 0.5秒淡出后完美进行下一句和切歌
                 }
             }
             
