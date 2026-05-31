@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>儿童节快乐</title>
     <style>
         * {
@@ -12,16 +12,20 @@
         }
         body, html {
             width: 100%;
-            height: 100%;
+            /* 使用svh(短视口高度)或lvh，防止手机浏览器工具栏遮挡内容 */
+            height: 100vh;
+            height: 100svh; 
             overflow: hidden;
             background-color: #111116;
-            font-family: 'Microsoft YaHei', sans-serif;
+            font-family: 'Microsoft YaHei', -apple-system, sans-serif;
         }
         canvas {
             display: block;
             position: absolute;
             top: 0;
             left: 0;
+            width: 100%;
+            height: 100%;
         }
     </style>
 </head>
@@ -29,12 +33,15 @@
     <canvas id="matrixCanvas"></canvas>
     <canvas id="particleCanvas"></canvas>
     <script>
+        // 获取屏幕像素比，解决手机高DPI模糊/文字过大问题
+        const dpr = window.devicePixelRatio || 1;
+
         // ==================== 1. 背景 LOVE 竖往下落 ====================
         const matrixCanvas = document.getElementById('matrixCanvas');
         const mCtx = matrixCanvas.getContext('2d');
 
         const isMobile = window.innerWidth < 768;
-        const fontSize = isMobile ? 24 : 36;          
+        const fontSize = isMobile ? 18 : 36; // 稍微调小手机端的背景字号          
         const columnSpacing = 12;     
         const columnWidth = fontSize + columnSpacing; 
         let columns;
@@ -45,20 +52,24 @@
         const word = "LOVE".split(""); 
 
         function resizeMatrix() {
-            matrixCanvas.width = window.innerWidth;
-            matrixCanvas.height = window.innerHeight;
+            // 考虑DPI放大画布物理像素
+            matrixCanvas.width = window.innerWidth * dpr;
+            matrixCanvas.height = window.innerHeight * dpr;
             
-            columns = Math.floor(matrixCanvas.width / columnWidth);
+            // 缩放画布上下文以适应逻辑像素
+            mCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+            columns = Math.floor(window.innerWidth / columnWidth);
             drops = [];
             for (let i = 0; i < columns; i++) {
-                drops[i] = Math.random() * (-matrixCanvas.height / fontSize) * 1.5;
+                drops[i] = Math.random() * (-window.innerHeight / fontSize) * 1.5;
             }
         }
         resizeMatrix();
 
         function drawMatrix() {
             mCtx.fillStyle = `rgba(17, 17, 22, ${trailOpacity})`;
-            mCtx.fillRect(0, 0, matrixCanvas.width, matrixCanvas.height);
+            mCtx.fillRect(0, 0, window.innerWidth, window.innerHeight);
 
             mCtx.fillStyle = "rgba(255, 105, 180, 0.35)";
             mCtx.font = `bold ${fontSize}px monospace`;
@@ -71,7 +82,7 @@
                     mCtx.fillText(text, i * columnWidth, currentLine * fontSize);
                 }
 
-                if (drops[i] * fontSize > matrixCanvas.height && Math.random() > 0.975) {
+                if (drops[i] * fontSize > window.innerHeight && Math.random() > 0.975) {
                     drops[i] = -word.length; 
                 }
                 drops[i] += matrixSpeed;
@@ -83,8 +94,10 @@
         const pCtx = particleCanvas.getContext('2d');
 
         function resizeParticle() {
-            particleCanvas.width = window.innerWidth;
-            particleCanvas.height = window.innerHeight;
+            // 同理处理粒子画布的高清屏缩放
+            particleCanvas.width = window.innerWidth * dpr;
+            particleCanvas.height = window.innerHeight * dpr;
+            pCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
         }
         resizeParticle();
 
@@ -94,12 +107,12 @@
 
         class Particle {
             constructor(x, y) {
-                this.x = Math.random() * particleCanvas.width;
-                this.y = Math.random() * particleCanvas.height;
+                // 初始随机位置在逻辑像素范围内
+                this.x = Math.random() * window.innerWidth;
+                this.y = Math.random() * window.innerHeight;
                 this.targetX = x;
                 this.targetY = y;
-                // 【梦幻微调】让粒子稍微大一点点（2.0px~3.5px），产生错落的颗粒感
-                this.radius = Math.random() * 1.5 + 2.0; 
+                this.radius = Math.random() * 1.0 + 1.5; // 配合高清屏微调粒子大小
                 this.speed = 0.05 + Math.random() * 0.04; 
             }
             update() {
@@ -108,10 +121,10 @@
             }
             draw() {
                 pCtx.beginPath();
+                // 绘制在逻辑坐标系上
                 pCtx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
                 pCtx.fillStyle = "rgba(255, 255, 255, 0.88)"; 
-                // 【梦幻微调】加大发光朦胧感，让粒子边缘有种毛茸茸的星光效果
-                pCtx.shadowBlur = 10; 
+                pCtx.shadowBlur = 8; 
                 pCtx.shadowColor = "#ffffff";
                 pCtx.fill();
                 pCtx.shadowBlur = 0;
@@ -123,12 +136,14 @@
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
            
+            // 采样画布无需DPI缩放，直接用标准逻辑分辨率
             tempCanvas.width = window.innerWidth;
             tempCanvas.height = window.innerHeight;
 
             let lines = [];
             if (text === "愿你永远天真烂漫，也永远有人偏爱") {
                 if (window.innerWidth < 600) { 
+                    // 手机端长句拆成 4 行，防止超出屏幕
                     lines = ["愿你永远", "天真烂漫", "也永远有", "人偏爱❤"];
                 } else {
                     lines = ["愿你永远天真烂漫", "也永远有人偏爱❤"];
@@ -138,19 +153,20 @@
             }
 
             const maxLength = Math.max(...lines.map(l => l.length));
-            const maxAllowedSize = window.innerWidth < 600 ? 52 : 110;
-            let size = Math.min(tempCanvas.width / (maxLength + 1.2), maxAllowedSize);
+            // 调小手机端的最大字号限制（从52调到36，确保带上安全边距后不会出界）
+            const maxAllowedSize = window.innerWidth < 600 ? 36 : 110;
+            let size = Math.min(tempCanvas.width / (maxLength + 1.5), maxAllowedSize);
             
             if (text.length === 1 && window.innerWidth < 600) {
-                size = 120;
+                size = 100;
             }
             
-            tempCtx.font = `bold ${size}px 'Microsoft YaHei', sans-serif`;
+            tempCtx.font = `bold ${size}px 'Microsoft YaHei', -apple-system, sans-serif`;
             tempCtx.fillStyle = '#ffffff';
             tempCtx.textAlign = 'center';
             tempCtx.textBaseline = 'middle';
            
-            const lineHeight = size * 1.35; 
+            const lineHeight = size * 1.4; 
             const totalHeight = lineHeight * lines.length;
             const startY = (tempCanvas.height - totalHeight) / 2 + lineHeight / 2;
 
@@ -161,14 +177,17 @@
            
             const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height).data;
             
-            // 【梦幻微调】采样步长定在 5.5，既保证长句能看清，又保留了萤火虫般的星光散落感
-            const step = 5.5; 
+            // 采样步长使用整数更安全
+            const step = 5; 
             
             for (let y = 0; y < tempCanvas.height; y += step) {
                 for (let x = 0; x < tempCanvas.width; x += step) {
-                    const index = (Math.floor(y) * tempCanvas.width + Math.floor(x)) * 4;
-                    if (imgData[index + 3] > 100) {
-                        points.push({ x: x, y: y });
+                    // 严格取整计算数组索引
+                    const posX = Math.floor(x);
+                    const posY = Math.floor(y);
+                    const index = (posY * tempCanvas.width + posX) * 4;
+                    if (imgData[index + 3] > 128) {
+                        points.push({ x: posX, y: posY });
                     }
                 }
             }
@@ -180,7 +199,7 @@
            
             if (particles.length < points.length) {
                 for (let i = particles.length; i < points.length; i++) {
-                    particles.push(new Particle(particleCanvas.width / 2, particleCanvas.height / 2));
+                    particles.push(new Particle(window.innerWidth / 2, window.innerHeight / 2));
                 }
             }
            
@@ -189,7 +208,7 @@
                     particles[i].targetX = points[i].x;
                     particles[i].targetY = points[i].y;
                 } else {
-                    particles[i].targetX = Math.random() * particleCanvas.width;
+                    particles[i].targetX = Math.random() * window.innerWidth;
                     particles[i].targetY = -50; 
                 }
             }
@@ -198,7 +217,6 @@
         // 初始化
         createTextTransition(textSequence[sequenceIndex]);
 
-        // 文字切换频率
         let textTimer = setInterval(switchText, 2500);
 
         function switchText() {
@@ -214,7 +232,7 @@
         // ==================== 3. 动画主循环 ====================
         function animate() {
             drawMatrix();
-            pCtx.clearRect(0, 0, particleCanvas.width, particleCanvas.height);
+            pCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
             
             particles.forEach(p => {
                 p.update();
