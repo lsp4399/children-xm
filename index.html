@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>粒子文字与浪漫代码雨特效(梦幻版)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #111116;
+            font-family: 'Microsoft YaHei', sans-serif;
+        }
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="matrixCanvas"></canvas>
+    <canvas id="particleCanvas"></canvas>
+    <script>
+        // ==================== 1. 背景 LOVE 竖往下落 ====================
+        const matrixCanvas = document.getElementById('matrixCanvas');
+        const mCtx = matrixCanvas.getContext('2d');
+
+        const isMobile = window.innerWidth < 768;
+        const fontSize = isMobile ? 24 : 36;          
+        const columnSpacing = 12;     
+        const columnWidth = fontSize + columnSpacing; 
+        let columns;
+        let drops = [];
+
+        let matrixSpeed = 0.23;       
+        let trailOpacity = 0.05;      
+        const word = "LOVE".split(""); 
+
+        function resizeMatrix() {
+            matrixCanvas.width = window.innerWidth;
+            matrixCanvas.height = window.innerHeight;
+            
+            columns = Math.floor(matrixCanvas.width / columnWidth);
+            drops = [];
+            for (let i = 0; i < columns; i++) {
+                drops[i] = Math.random() * (-matrixCanvas.height / fontSize) * 1.5;
+            }
+        }
+        resizeMatrix();
+
+        function drawMatrix() {
+            mCtx.fillStyle = `rgba(17, 17, 22, ${trailOpacity})`;
+            mCtx.fillRect(0, 0, matrixCanvas.width, matrixCanvas.height);
+
+            mCtx.fillStyle = "rgba(255, 105, 180, 0.35)";
+            mCtx.font = `bold ${fontSize}px monospace`;
+
+            for (let i = 0; i < drops.length; i++) {
+                const currentLine = Math.floor(drops[i]);
+                if (currentLine >= 0) {
+                    const charIndex = currentLine % word.length;
+                    const text = word[charIndex];
+                    mCtx.fillText(text, i * columnWidth, currentLine * fontSize);
+                }
+
+                if (drops[i] * fontSize > matrixCanvas.height && Math.random() > 0.975) {
+                    drops[i] = -word.length; 
+                }
+                drops[i] += matrixSpeed;
+            }
+        }
+
+        // ==================== 2. 粒子文字特效 ====================
+        const particleCanvas = document.getElementById('particleCanvas');
+        const pCtx = particleCanvas.getContext('2d');
+
+        function resizeParticle() {
+            particleCanvas.width = window.innerWidth;
+            particleCanvas.height = window.innerHeight;
+        }
+        resizeParticle();
+
+        let particles = [];
+        const textSequence = ["3", "2", "1", "祝", "许萌", "六一快乐", "愿你永远天真烂漫，也永远有人偏爱"];
+        let sequenceIndex = 0;
+
+        class Particle {
+            constructor(x, y) {
+                this.x = Math.random() * particleCanvas.width;
+                this.y = Math.random() * particleCanvas.height;
+                this.targetX = x;
+                this.targetY = y;
+                // 【梦幻微调】让粒子稍微大一点点（2.0px~3.5px），产生错落的颗粒感
+                this.radius = Math.random() * 1.5 + 2.0; 
+                this.speed = 0.05 + Math.random() * 0.04; 
+            }
+            update() {
+                this.x += (this.targetX - this.x) * this.speed;
+                this.y += (this.targetY - this.y) * this.speed;
+            }
+            draw() {
+                pCtx.beginPath();
+                pCtx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                pCtx.fillStyle = "rgba(255, 255, 255, 0.88)"; 
+                // 【梦幻微调】加大发光朦胧感，让粒子边缘有种毛茸茸的星光效果
+                pCtx.shadowBlur = 10; 
+                pCtx.shadowColor = "#ffffff";
+                pCtx.fill();
+                pCtx.shadowBlur = 0;
+            }
+        }
+
+        function getTextPoints(text) {
+            const points = [];
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+           
+            tempCanvas.width = window.innerWidth;
+            tempCanvas.height = window.innerHeight;
+
+            let lines = [];
+            if (text === "愿你永远天真烂漫，也永远有人偏爱") {
+                if (window.innerWidth < 600) { 
+                    lines = ["愿你永远", "天真烂漫", "也永远有", "人偏爱❤"];
+                } else {
+                    lines = ["愿你永远天真烂漫", "也永远有人偏爱❤"];
+                }
+            } else {
+                lines.push(text);
+            }
+
+            const maxLength = Math.max(...lines.map(l => l.length));
+            const maxAllowedSize = window.innerWidth < 600 ? 52 : 110;
+            let size = Math.min(tempCanvas.width / (maxLength + 1.2), maxAllowedSize);
+            
+            if (text.length === 1 && window.innerWidth < 600) {
+                size = 120;
+            }
+            
+            tempCtx.font = `bold ${size}px 'Microsoft YaHei', sans-serif`;
+            tempCtx.fillStyle = '#ffffff';
+            tempCtx.textAlign = 'center';
+            tempCtx.textBaseline = 'middle';
+           
+            const lineHeight = size * 1.35; 
+            const totalHeight = lineHeight * lines.length;
+            const startY = (tempCanvas.height - totalHeight) / 2 + lineHeight / 2;
+
+            lines.forEach((lineText, index) => {
+                const currentY = startY + index * lineHeight;
+                tempCtx.fillText(lineText, tempCanvas.width / 2, currentY);
+            });
+           
+            const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height).data;
+            
+            // 【梦幻微调】采样步长定在 5.5，既保证长句能看清，又保留了萤火虫般的星光散落感
+            const step = 5.5; 
+            
+            for (let y = 0; y < tempCanvas.height; y += step) {
+                for (let x = 0; x < tempCanvas.width; x += step) {
+                    const index = (Math.floor(y) * tempCanvas.width + Math.floor(x)) * 4;
+                    if (imgData[index + 3] > 100) {
+                        points.push({ x: x, y: y });
+                    }
+                }
+            }
+            return points;
+        }
+
+        function createTextTransition(text) {
+            const points = getTextPoints(text);
+           
+            if (particles.length < points.length) {
+                for (let i = particles.length; i < points.length; i++) {
+                    particles.push(new Particle(particleCanvas.width / 2, particleCanvas.height / 2));
+                }
+            }
+           
+            for (let i = 0; i < particles.length; i++) {
+                if (i < points.length) {
+                    particles[i].targetX = points[i].x;
+                    particles[i].targetY = points[i].y;
+                } else {
+                    particles[i].targetX = Math.random() * particleCanvas.width;
+                    particles[i].targetY = -50; 
+                }
+            }
+        }
+
+        // 初始化
+        createTextTransition(textSequence[sequenceIndex]);
+
+        // 文字切换频率
+        let textTimer = setInterval(switchText, 2500);
+
+        function switchText() {
+            sequenceIndex = (sequenceIndex + 1) % textSequence.length;
+            
+            clearInterval(textTimer);
+            const nextTime = textSequence[sequenceIndex].length > 6 ? 4500 : 2500;
+            textTimer = setInterval(switchText, nextTime);
+
+            createTextTransition(textSequence[sequenceIndex]);
+        }
+
+        // ==================== 3. 动画主循环 ====================
+        function animate() {
+            drawMatrix();
+            pCtx.clearRect(0, 0, particleCanvas.width, particleCanvas.height);
+            
+            particles.forEach(p => {
+                p.update();
+                p.draw();
+            });
+            
+            requestAnimationFrame(animate);
+        }
+        animate();
+
+        // 窗口调整
+        window.addEventListener('resize', () => {
+            resizeMatrix();
+            resizeParticle();
+            createTextTransition(textSequence[sequenceIndex]);
+        });
+    </script>
+</body>
+</html>
