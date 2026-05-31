@@ -26,7 +26,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            opacity: 0; /* 默认隐藏：音乐响起前保持静谧，响起时配合特效爆发 */
+            opacity: 0; 
             transition: opacity 1.5s ease;
         }
     </style>
@@ -41,9 +41,7 @@
     <script>
         const dpr = window.devicePixelRatio || 1;
 
-        // ==================== 1. 【高能重构】多歌曲列表循环 & 强力全自动播放 ====================
-        
-        // 已经帮你精准配置好 music 文件夹路径与完整文件名
+        // ==================== 1. 多歌曲列表循环 & 全自动播放 ====================
         const playlist = [
             "music/唐宁_-_我和你.ogg",
             "music/邵丽棠_-_快乐的扑满.flac"
@@ -51,39 +49,32 @@
         let currentTrackIndex = 0;
 
         const audio = document.getElementById('bgMusic');
-        let hasInitializedAnimation = false; // 是否已经触发动画亮起
+        let hasInitializedAnimation = false; 
 
-        // 初始化播放首支歌曲
         audio.src = playlist[currentTrackIndex];
 
-        // 核心：当第一首播完，自动切换到下一首，实现列表无限循环
         audio.addEventListener('ended', function() {
             currentTrackIndex = (currentTrackIndex + 1) % playlist.length;
             audio.src = playlist[currentTrackIndex];
-            audio.play().catch(err => console.log("切歌自动播放被拦截，等待点击:", err));
+            audio.play().catch(err => console.log("切歌自动播放被拦截:", err));
         });
 
-        // 激活特效并让画面淡入显现
         function startVisuals() {
             if (!hasInitializedAnimation) {
                 hasInitializedAnimation = true;
-                // 让背景雨和粒子 Canvas 优雅淡入显现
                 document.getElementById('matrixCanvas').style.opacity = '1';
                 document.getElementById('particleCanvas').style.opacity = '1';
-                // 启动动画主循环
                 animate();
             }
         }
 
-        // 硬核播放函数
         function forcePlayMusic() {
             if (audio) {
                 audio.play().then(() => {
-                    console.log("音乐全自动启动成功！");
                     startVisuals();
                     removePlayListeners();
                 }).catch(err => {
-                    console.log("常规浏览器拦截了首帧无交互音频，正在等待用户首次触屏或移动鼠标...");
+                    console.log("等待用户首次交互以解锁音频...");
                 });
             }
         }
@@ -91,18 +82,13 @@
         function removePlayListeners() {
             window.removeEventListener('click', forcePlayMusic);
             window.removeEventListener('touchstart', forcePlayMusic);
-            window.removeEventListener('mousemove', forcePlayMusic);
+            window.removeEventListener('mousemove', forcePlayMusic); 
         }
 
-        // [策略1] 页面结构加载完，立刻硬核冲锋尝试播放
         window.addEventListener('DOMContentLoaded', forcePlayMusic);
-
-        // [策略2] 针对微信端的全自动绿色通道，直接突破限制一打开就播
         document.addEventListener("WeixinJSBridgeReady", function () {
             forcePlayMusic();
         }, false);
-
-        // [策略3] 针对普通浏览器（Safari/Chrome）的无感知拦截解锁（点按、划动、鼠标一晃瞬间激活）
         window.addEventListener('click', forcePlayMusic);
         window.addEventListener('touchstart', forcePlayMusic);
         window.addEventListener('mousemove', forcePlayMusic); 
@@ -166,7 +152,7 @@
             }
         }
 
-        // ==================== 3. 粒子文字特效 ====================
+        // ==================== 3. 粒子文字特效（引入智能进度控制） ====================
         const particleCanvas = document.getElementById('particleCanvas');
         const pCtx = particleCanvas.getContext('2d');
 
@@ -178,8 +164,15 @@
         resizeParticle();
 
         let particles = [];
+        let targetPoints = []; 
         const textSequence = ["3", "2", "1", "祝", "许萌", "六一快乐", "愿你永远天真烂漫，也永远有人偏爱"];
         let sequenceIndex = 0;
+
+        // 新增：用于掌控切换节奏的状态机变量
+        let isTransitioningOut = false; 
+        let stayStartTime = 0;          
+        const baseStayTime = 1800;      // 短句子看完停留的时间 (1.8秒)
+        const longStayTime = 4500;      // 最后一首长句子完全显示完后，静静观赏停留的时间 (4.5秒)
 
         class Particle {
             constructor(x, y, isExtra = false) {
@@ -260,7 +253,7 @@
             });
            
             const imgData = memCtx.getImageData(0, 0, memCanvas.width, memCanvas.height).data;
-            const step = window.innerWidth < 600 ? 3 : 4; 
+            const step = window.innerWidth < 600 ? 4 : 4; 
             
             for (let y = 0; y < memCanvas.height; y += step) {
                 for (let x = 0; x < memCanvas.width; x += step) {
@@ -280,61 +273,92 @@
         }
 
         function createTextTransition(text) {
-            const points = getTextPoints(text);
+            targetPoints = getTextPoints(text);
             particles = particles.filter(p => !p.isDying || p.alpha > 0);
 
-            if (particles.length < points.length) {
-                const currentLen = particles.length;
-                for (let i = 0; i < points.length; i++) {
-                    if (i < currentLen) {
-                        particles[i].targetX = points[i].x;
-                        particles[i].targetY = points[i].y;
-                    } else {
-                        particles.push(new Particle(points[i].x, points[i].y));
-                    }
-                }
-            } else {
-                for (let i = 0; i < particles.length; i++) {
-                    if (i < points.length) {
-                        particles[i].targetX = points[i].x;
-                        particles[i].targetY = points[i].y;
-                        particles[i].isDying = false;
-                        particles[i].alpha = 1;
-                    } else {
-                        particles[i].isDying = true;
-                    }
+            if (particles.length > targetPoints.length) {
+                for (let i = targetPoints.length; i < particles.length; i++) {
+                    particles[i].isDying = true;
                 }
             }
+            // 重置新一页的停留计时状态
+            stayStartTime = 0;
+            isTransitioningOut = false;
         }
 
+        // 核心改动：废除原本强制中断的 setInterval 定时器！
+        // 初始化仅做首句加载
         createTextTransition(textSequence[sequenceIndex]);
 
-        let textTimer = setInterval(switchText, 2500);
-
-        function switchText() {
+        // 下一页的调度逻辑
+        function nextSequence() {
             sequenceIndex = (sequenceIndex + 1) % textSequence.length;
-            
-            clearInterval(textTimer);
-            const nextTime = textSequence[sequenceIndex].length > 6 ? 4500 : 2500;
-            textTimer = setInterval(switchText, nextTime);
-
             createTextTransition(textSequence[sequenceIndex]);
         }
 
-        // ==================== 4. 动画主循环 ====================
+        // ==================== 4. 动画主循环（全新状态机） ====================
         function animate() {
             drawMatrix(); 
             pCtx.clearRect(0, 0, window.innerWidth, window.innerHeight); 
             
+            // 每帧流式平滑补充新粒子，绝不卡顿
+            let bornCount = 0;
+            const maxBirthPerFrame = 40; 
+
+            for (let i = 0; i < targetPoints.length; i++) {
+                if (i < particles.length) {
+                    if(particles[i].isDying) {
+                        particles[i].isDying = false;
+                        particles[i].alpha = 1;
+                    }
+                    particles[i].targetX = targetPoints[i].x;
+                    particles[i].targetY = targetPoints[i].y;
+                } else if (bornCount < maxBirthPerFrame) {
+                    particles.push(new Particle(targetPoints[i].x, targetPoints[i].y));
+                    bornCount++;
+                }
+            }
+
+            // 更新并绘制现有粒子
+            let activeParticlesInPlace = 0; // 记录有多少个粒子已经准确到达了目标文字位置
+            
             particles.forEach(p => {
                 p.update();
                 p.draw();
+                
+                // 判断粒子是否已经精确聚拢到位
+                if (!p.isDying && Math.abs(p.x - p.targetX) < 1.5 && Math.abs(p.y - p.targetY) < 1.5) {
+                    activeParticlesInPlace++;
+                }
             });
+
+            // 【核心重构：智能化进度闭环控制】
+            // 当且仅当：粒子总数量已经补齐，且至少有 92% 的粒子已经全部聚拢到位，字完全变清晰了！
+            const currentText = textSequence[sequenceIndex];
+            if (particles.filter(p => !p.isDying).length >= targetPoints.length && activeParticlesInPlace >= targetPoints.length * 0.92) {
+                
+                if (stayStartTime === 0) {
+                    // 字刚全部显现完整，这一刻开始记录停留时间
+                    stayStartTime = Date.now();
+                }
+
+                // 判断应该停留多长时间（长句子停留久一点，短数字快一点）
+                const currentRequiredStayTime = currentText.length > 6 ? longStayTime : baseStayTime;
+
+                // 停留时间足够后，触发淡出并走向下一页
+                if (Date.now() - stayStartTime > currentRequiredStayTime && !isTransitioningOut) {
+                    isTransitioningOut = true;
+                    // 让当前句子的所有粒子原地淡出退场
+                    particles.forEach(p => p.isDying = true);
+                    
+                    // 等待半秒钟淡出特效完成后，无缝切入下一句
+                    setTimeout(nextSequence, 500);
+                }
+            }
             
             requestAnimationFrame(animate);
         }
 
-        // 窗口尺寸变更平滑自适应
         let resizeTimeout;
         window.addEventListener('resize', () => {
             clearTimeout(resizeTimeout);
