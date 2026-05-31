@@ -33,7 +33,7 @@
 </head>
 <body>
 
-    <audio id="bgMusic"></audio>
+    <audio id="bgMusic" src="music/唐宁_-_我和你.ogg" loop></audio>
 
     <canvas id="matrixCanvas"></canvas>
     <canvas id="particleCanvas"></canvas>
@@ -41,18 +41,9 @@
     <script>
         const dpr = window.devicePixelRatio || 1;
 
-        // ==================== 1. 多歌曲列表与文字动画完美交替 ====================
-        const playlist = [
-            "music/唐宁_-_我和你.ogg",
-            "music/邵丽棠_-_快乐的扑满.flac"
-        ];
-        let currentTrackIndex = 0;
-
+        // ==================== 1. 稳定音频激活逻辑 ====================
         const audio = document.getElementById('bgMusic');
         let hasInitializedAnimation = false; 
-
-        // 设置初始歌曲
-        audio.src = playlist[currentTrackIndex];
 
         function startVisuals() {
             if (!hasInitializedAnimation) {
@@ -69,7 +60,7 @@
                     startVisuals();
                     removePlayListeners();
                 }).catch(err => {
-                    console.log("等待用户首次交互以激活音频...");
+                    console.log("等待交互激活...");
                 });
             }
         }
@@ -279,21 +270,12 @@
             isTransitioningOut = false;
         }
 
-        // 初始化首句
+        // 初始化
         createTextTransition(textSequence[sequenceIndex]);
 
-        // 【大招：由文字进度绝对掌控换页、切歌】
+        // 文字无限循环调度
         function nextSequence() {
-            const oldIndex = sequenceIndex;
             sequenceIndex = (sequenceIndex + 1) % textSequence.length;
-            
-            // 只要一轮文字彻底放完了（从最后一句话跳回“3”），立刻强行无缝切换下一首歌！
-            if (oldIndex === textSequence.length - 1) {
-                currentTrackIndex = (currentTrackIndex + 1) % playlist.length;
-                audio.src = playlist[currentTrackIndex];
-                audio.play().catch(err => console.log("切歌自动播放:", err));
-            }
-
             createTextTransition(textSequence[sequenceIndex]);
         }
 
@@ -342,7 +324,7 @@
                 if (Date.now() - stayStartTime > currentRequiredStayTime && !isTransitioningOut) {
                     isTransitioningOut = true;
                     particles.forEach(p => p.isDying = true);
-                    setTimeout(nextSequence, 500); // 0.5秒淡出后完美进行下一句和切歌
+                    setTimeout(nextSequence, 500); 
                 }
             }
             
